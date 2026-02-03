@@ -1,0 +1,382 @@
+// FactoryPlanner.scss
+
+// Dark theme variables
+$fp-bg-dark: #1e1e1e;
+$fp-bg-panel: #2d2d2d;
+$fp-bg-header: #333333;
+$fp-border-color: #444444;
+$fp-text-main: #e0e0e0;
+$fp-text-muted: #aaaaaa;
+$fp-accent: #fa9d00; 
+
+// Reset/Override Bootstrap defaults inside our container
+.fp-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  background-color: $fp-bg-dark;
+  color: $fp-text-main;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  overflow: hidden;
+  position: relative; // For modal positioning context
+
+  * {
+    box-sizing: border-box;
+  }
+
+  // Force text color on common elements that might be overridden by bootstrap
+  h1, h2, h3, h4, h5, h6, span, div, p, label {
+      color: $fp-text-main;
+  }
+  
+  // Antd Select styling for dark theme
+  .ant-select {
+    .ant-select-selector {
+      background: #333 !important;
+      border-color: #555 !important;
+      color: #eee !important;
+    }
+    .ant-select-selection-item {
+      background: #555 !important;
+      border-color: #666 !important;
+      color: #eee !important;
+    }
+    .ant-select-arrow {
+      color: #888 !important;
+    }
+  }
+}
+
+// Icon Slot Style (Factorio-like)
+.fp-icon-slot {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 44px;
+    background-color: #484848; // Default dark grey
+    border: 1px solid #111;
+    border-radius: 2px;
+    box-shadow: inset 1px 1px 2px rgba(0,0,0,0.5), 1px 1px 2px rgba(255,255,255,0.1);
+    margin: 2px;
+    cursor: pointer;
+    flex-shrink: 0;
+
+    &.product-slot {
+         background-color: #608060; // Greenish for products
+         border-color: #2e462e;
+    }
+    &.product-slot-unplanned {
+        background-color: #803030; // Red background for unfulfilled/unplanned
+        border-color: #5c2020;
+    }
+    &.ingredient-slot {
+         background-color: #806060; // Reddish for ingredients
+    }
+    &.factory-slot {
+         background-color: #606080; // Blueish for machines
+    }
+    &.catalyst-slot {
+         background-color: #806080; // Purple for catalysts
+         border-color: #5c405c;
+         box-shadow: inset 0 0 8px rgba(200, 100, 200, 0.4);
+    }
+    &.byproduct-slot {
+         background-color: #707050; // Yellowish-brown for byproducts
+         border-color: #4a4a30;
+    }
+
+    // Center the icon
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    .icon-overlay-text {
+        position: absolute;
+        bottom: 0px;
+        right: 2px;
+        font-size: 11px;
+        font-weight: 900;
+        color: white;
+        text-shadow: 
+            -1px -1px 0 #000,  
+             1px -1px 0 #000,
+            -1px  1px 0 #000,
+             1px  1px 0 #000;
+        line-height: 1;
+        pointer-events: none; // Click through to icon
+        z-index: 2;
+        font-family: Consolas, monospace;
+    }
+}
+
+// Modal Styles
+.fp-modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.fp-modal {
+    width: 500px;
+    max-height: 80vh;
+    background-color: #2e2e2e;
+    border: 1px solid #444;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    color: $fp-text-main;
+
+    .fp-modal-header {
+        padding: 10px;
+        background-color: #383838;
+        border-bottom: 1px solid #444;
+        font-weight: bold;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .fp-modal-body {
+        padding: 15px;
+        overflow-y: auto;
+    }
+
+    .fp-modal-footer {
+        padding: 10px;
+        border-top: 1px solid #444;
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        background-color: #383838;
+    }
+}
+
+// Item Selector Grid
+.fp-item-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    justify-content: flex-start;
+    max-height: 400px;
+    overflow-y: auto;
+    
+    // Custom scrollbar
+    &::-webkit-scrollbar {
+        width: 8px;
+    }
+    &::-webkit-scrollbar-track {
+        background: #222;
+    }
+    &::-webkit-scrollbar-thumb {
+        background: #555;
+    }
+}
+
+// Sidebar
+.fp-sidebar {
+  width: 260px;
+  min-width: 260px;
+  background-color: #252525;
+  border-right: 1px solid $fp-border-color;
+  display: flex;
+  flex-direction: column;
+
+  .sidebar-header {
+      padding: 10px;
+      background-color: $fp-bg-header;
+      border-bottom: 1px solid $fp-border-color;
+      font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: $fp-text-main;
+  }
+
+  .sidebar-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 5px;
+  }
+  
+  .plan-item {
+      padding: 8px 10px;
+      margin-bottom: 2px;
+      background-color: #333;
+      cursor: pointer;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      font-size: 14px;
+      color: $fp-text-main;
+      
+      &:hover {
+          background-color: #444;
+      }
+      &.active {
+          background-color: #555;
+          border-left: 3px solid $fp-accent;
+      }
+      .icon-placeholder {
+          width: 20px;
+          height: 20px;
+          background-color: #666;
+          margin-right: 8px;
+      }
+  }
+}
+
+// Main Area
+.fp-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: $fp-bg-dark;
+}
+
+// Top Info Bar
+.fp-top-bar {
+  height: 40px;
+  background-color: #252525;
+  border-bottom: 1px solid $fp-border-color;
+  display: flex;
+  align-items: center;
+  padding: 0 15px;
+  font-size: 14px;
+  justify-content: space-between;
+
+  .stats {
+      color: $fp-text-muted;
+      span {
+          color: $fp-text-main;
+          font-weight: bold;
+      }
+  }
+  
+  label.btn {
+      color: $fp-text-main;
+  }
+}
+
+// Summary Panel (Dashboard)
+.fp-summary-panel {
+  display: flex;
+  padding: 10px;
+  gap: 10px;
+  background-color: $fp-bg-dark;
+  border-bottom: 1px solid $fp-border-color;
+}
+
+.fp-summary-box {
+  flex: 1;
+  background-color: $fp-bg-panel;
+  border: 1px solid #3e3e3e;
+  border-radius: 4px;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100px;
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.05), inset -1px -1px 0 rgba(0, 0, 0, 0.2); 
+
+  h4 {
+      font-size: 13px;
+      font-weight: bold;
+      color: #fa9d00;
+      margin: 0 0 8px 0;
+      padding-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+  }
+
+  .box-content {
+      flex: 1;
+      display: flex;
+      flex-wrap: wrap;
+      align-content: flex-start;
+      gap: 4px;
+      
+      background-color: #222; 
+      padding: 4px;
+      border-radius: 2px;
+      box-shadow: inset 2px 2px 5px rgba(0,0,0,0.5); 
+  }
+}
+
+// Controls Bar
+.fp-controls-bar {
+  padding: 5px 10px;
+  background-color: #2d2d2d;
+  border-bottom: 1px solid $fp-border-color;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  color: $fp-text-main;
+}
+
+// Table Area
+.fp-table-area {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  background-color: $fp-bg-dark;
+  
+  .empty-state {
+      padding: 20px;
+      color: $fp-text-main;
+      font-size: 14px;
+  }
+
+  table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      color: $fp-text-main;
+      
+      thead {
+          position: sticky;
+          top: 0;
+          background-color: #252525;
+          z-index: 10;
+          
+          th {
+              text-align: left;
+              padding: 8px;
+              color: $fp-text-muted;
+              border-bottom: 1px solid $fp-border-color;
+              font-weight: normal;
+          }
+      }
+
+      tbody {
+          tr {
+              border-bottom: 1px solid #333;
+              
+              &:hover {
+                  background-color: #2d2d2d;
+              }
+
+              td {
+                  padding: 6px 8px;
+                  vertical-align: middle;
+                  color: $fp-text-main;
+              }
+          }
+      }
+  }
+}
+
+.recipe-select-item {
+    transition: background-color 0.2s;
+    &:hover {
+        background-color: #555 !important;
+        border-color: #888 !important;
+    }
+}
