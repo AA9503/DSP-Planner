@@ -93,13 +93,21 @@ export function FactoryPlannerLayout() {
 
     // Mod change handler (adapted from App.jsx GameVersion component)
     const handleModsChange = async (modList) => {
-        if (products.length > 0 || productionRows.length > 0) {
-            if (!confirm(`检测到规划器内有配方，确认继续切换mod吗？切换后将清空规划！`)) {
+        // 检查所有方案是否有内容
+        const hasContent = plans.some(p => p.products.length > 0 || p.productionRows.length > 0);
+        if (hasContent) {
+            if (!confirm(`检测到规划器内有配方，确认继续切换mod吗？切换后将清空所有生产策略！`)) {
                 return;
             }
-            setProducts([]);
-            setProductionRows([]);
-            setUserFreeItems(new Set());
+            // 重置为初始状态：只有一个空方案
+            setPlans([{
+                id: 1,
+                name: '新方案',
+                products: [],
+                productionRows: [],
+                userFreeItems: new Set()
+            }]);
+            setActivePlanId(1);
         }
 
         // Dependency logic from App.jsx
