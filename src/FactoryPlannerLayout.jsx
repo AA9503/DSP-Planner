@@ -487,12 +487,71 @@ export function FactoryPlannerLayout() {
     const mod_options = get_mod_options();
 
     // View State
-    const [products, setProducts] = useState([]);
-    const [productionRows, setProductionRows] = useState([]); // List of { id, recipeObj }
-    const [userFreeItems, setUserFreeItems] = useState(new Set()); // User-specified free variables
+    const [plans, setPlans] = useState([{
+        id: 1,
+        name: '新方案',
+        products: [],
+        productionRows: [],
+        userFreeItems: new Set()
+    }]);
+    const [activePlanId, setActivePlanId] = useState(1);
+    
+    const activePlan = useMemo(() => plans.find(p => p.id === activePlanId), [plans, activePlanId]);
+    const products = useMemo(() => activePlan?.products || [], [activePlan]);
+    const productionRows = useMemo(() => activePlan?.productionRows || [], [activePlan]);
+    const userFreeItems = useMemo(() => activePlan?.userFreeItems || new Set(), [activePlan]);
+    
+    const setProducts = (newProducts) => {
+        setPlans(prev => prev.map(plan => 
+            plan.id === activePlanId 
+                ? { ...plan, products: typeof newProducts === 'function' ? newProducts(plan.products) : newProducts }
+                : plan
+        ));
+    };
+    
+    const setProductionRows = (newRows) => {
+        setPlans(prev => prev.map(plan => 
+            plan.id === activePlanId 
+                ? { ...plan, productionRows: typeof newRows === 'function' ? newRows(plan.productionRows) : newRows }
+                : plan
+        ));
+    };
+    
+    const setUserFreeItems = (newItems) => {
+        setPlans(prev => prev.map(plan => 
+            plan.id === activePlanId 
+                ? { ...plan, userFreeItems: typeof newItems === 'function' ? newItems(plan.userFreeItems) : newItems }
+                : plan
+        ));
+    };
+    
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [pendingNewPlan, setPendingNewPlan] = useState(false); // 标记是否正在创建新方案
     const [recipeSelector, setRecipeSelector] = useState({ isOpen: false, item: null, mode: 'produce' });
     const [popoverState, setPopoverState] = useState({ isOpen: false, product: null, position: {x:0, y:0} });
+
+    // Plan management functions
+    const handleAddNewPlan = () => {
+        // 打开添加产物窗口，同时标记正在创建新方案
+        setPendingNewPlan(true);
+        setIsAddModalOpen(true);
+    };
+    
+    const handleSwitchPlan = (planId) => {
+        setActivePlanId(planId);
+    };
+    
+    const handleDeletePlan = (planId) => {
+        if (plans.length <= 1) {
+            alert('至少需要保留一个方案');
+            return;
+        }
+        const remainingPlans = plans.filter(p => p.id !== planId);
+        setPlans(remainingPlans);
+        if (activePlanId === planId) {
+            setActivePlanId(remainingPlans[0].id);
+        }
+    };
 
     // Mod change handler (adapted from App.jsx GameVersion component)
     const handleModsChange = async (modList) => {
@@ -710,7 +769,29 @@ export function FactoryPlannerLayout() {
 
     // Handlers
     const handleAddProduct = (item, count) => {
-        setProducts([...products, { id: Date.now(), name: item, count: count }]);
+        if (pendingNewPlan) {
+            // 创建新方案并添加产物
+            const newId = Math.max(...plans.map(p => p.id)) + 1;
+            const newProduct = { id: Date.now(), name: item, count };
+            setPlans(prev => [...prev, {
+                id: newId,
+                name: item, // 用产物名作为方案名
+                products: [newProduct],
+                productionRows: [],
+                userFreeItems: new Set()
+            }]);
+            setActivePlanId(newId);
+            setPendingNewPlan(false);
+        } else {
+            // 正常添加到当前方案
+            setProducts([...products, { id: Date.now(), name: item, count: count }]);
+            // 更新方案名（如果是第一个产物）
+            if (products.length === 0) {
+                setPlans(prev => prev.map(plan => 
+                    plan.id === activePlanId ? { ...plan, name: item } : plan
+                ));
+            }
+        }
         setIsAddModalOpen(false);
     }
     const handleDeleteProduct = (id) => {
@@ -791,7 +872,7 @@ export function FactoryPlannerLayout() {
             {/* Modals */}
             <AddProductModal 
                 isOpen={isAddModalOpen} 
-                onClose={() => setIsAddModalOpen(false)}
+                onClose={() => { setIsAddModalOpen(false); setPendingNewPlan(false); }}
                 onConfirm={handleAddProduct}
             />
             <ProductEditPopover 
@@ -818,18 +899,35 @@ export function FactoryPlannerLayout() {
                 <div className="fp-sidebar">
                     <div className="sidebar-header">
                         <span>生产策略</span>
-                        <button className="btn btn-outline-secondary btn-sm" title="新建方案">+</button>
+                        <button className="btn btn-outline-secondary btn-sm" title="新建方案" onClick={handleAddNewPlan}>+</button>
                     </div>
                     <div className="sidebar-content">
-                        <div className="plan-item active">
-                            {products.length > 0 ? (
-                                <IconSlot item={products[0].name} type="product" />
-                            ) : (
-                                <div className="icon-placeholder"></div>
-                            )}
-                            <span>{products.length > 0 ? products[0].name : '新方案'}</span>
-                        </div>
-                        {/* Future: list of saved plans here */}
+                        {plans.map(plan => (
+                            <div 
+                                key={plan.id}
+                                className={`plan-item ${plan.id === activePlanId ? 'active' : ''}`}
+                                onClick={() => handleSwitchPlan(plan.id)}
+                            >
+                                <div className="plan-icon-wrapper">
+                                    {plan.products.length > 0 ? (
+                                        <IconSlot item={plan.products[0].name} type="product" />
+                                    ) : (
+                                        <div className="icon-placeholder"></div>
+                                    )}
+                                </div>
+                                <span className="plan-name">{plan.name}</span>
+                                {plans.length > 1 && (
+                                    <button 
+                                        className="btn-delete"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeletePlan(plan.id);
+                                        }}
+                                        title="删除方案"
+                                    >×</button>
+                                )}
+                            </div>
+                        ))}
                     </div>
                 </div>
 

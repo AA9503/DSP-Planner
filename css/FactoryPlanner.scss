@@ -207,28 +207,76 @@ $fp-accent: #fa9d00;
   }
   
   .plan-item {
-      padding: 8px 10px;
+      padding: 6px 8px;
       margin-bottom: 2px;
       background-color: #333;
       cursor: pointer;
       border-radius: 3px;
       display: flex;
       align-items: center;
-      font-size: 14px;
+      font-size: 13px;
       color: $fp-text-main;
+      gap: 8px;
+      position: relative;
       
       &:hover {
           background-color: #444;
+          
+          .btn-delete {
+              opacity: 1;
+          }
       }
       &.active {
-          background-color: #555;
+          background-color: #4a4a4a;
           border-left: 3px solid $fp-accent;
+          padding-left: 5px;
       }
+      
+      .plan-icon-wrapper {
+          width: 28px;
+          height: 28px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          
+          .fp-icon-slot {
+              width: 28px;
+              height: 28px;
+              min-width: 28px;
+              min-height: 28px;
+          }
+      }
+      
       .icon-placeholder {
-          width: 20px;
-          height: 20px;
-          background-color: #666;
-          margin-right: 8px;
+          width: 28px;
+          height: 28px;
+          background-color: #555;
+          border-radius: 3px;
+          border: 1px dashed #666;
+      }
+      
+      .plan-name {
+          flex: 1;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+      }
+      
+      .btn-delete {
+          opacity: 0;
+          background: none;
+          border: none;
+          color: #888;
+          font-size: 16px;
+          cursor: pointer;
+          padding: 0 4px;
+          line-height: 1;
+          transition: opacity 0.2s, color 0.2s;
+          
+          &:hover {
+              color: #ff6b6b;
+          }
       }
   }
 }
