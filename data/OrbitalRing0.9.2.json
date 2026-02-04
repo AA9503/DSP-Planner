@@ -789,19 +789,19 @@
       "Name": "材料矩阵",
       "Items": [
         1107,
-        1123
+        1124
       ],
       "ItemCounts": [
-        1,
-        2
+        2,
+        1
       ],
       "Results": [
         6003
       ],
       "ResultCounts": [
-        1
+        2
       ],
-      "TimeSpend": 480,
+      "TimeSpend": 960,
       "Proliferator": 3,
       "IconName": "c-matrix"
     },
@@ -1022,7 +1022,7 @@
         1,
         3
       ],
-      "TimeSpend": 240,
+      "TimeSpend": 120,
       "Proliferator": 3,
       "IconName": "nanotube"
     },
@@ -5522,7 +5522,7 @@
         7019
       ],
       "ResultCounts": [
-        4
+        2
       ],
       "TimeSpend": 120,
       "Proliferator": 3,
@@ -6885,7 +6885,7 @@
       "ResultCounts": [
         6
       ],
-      "TimeSpend": 960,
+      "TimeSpend": 5760,
       "Proliferator": 1,
       "IconName": ""
     },
@@ -6909,7 +6909,7 @@
       "ResultCounts": [
         4
       ],
-      "TimeSpend": 480,
+      "TimeSpend": 2880,
       "Proliferator": 1,
       "IconName": ""
     },
@@ -6935,7 +6935,7 @@
       "ResultCounts": [
         4
       ],
-      "TimeSpend": 240,
+      "TimeSpend": 1440,
       "Proliferator": 3,
       "IconName": "accelerator-2"
     },
@@ -7619,7 +7619,7 @@
         6206
       ],
       "ItemCounts": [
-        3,
+        2,
         2
       ],
       "Results": [
@@ -7630,9 +7630,9 @@
       "ResultCounts": [
         24,
         16,
-        3
+        2
       ],
-      "TimeSpend": 480,
+      "TimeSpend": 5760,
       "Proliferator": 1,
       "IconName": "wood"
     },
@@ -8008,7 +8008,7 @@
         7804
       ],
       "ResultCounts": [
-        4
+        3
       ],
       "TimeSpend": 360,
       "Proliferator": 3,
@@ -8109,8 +8109,8 @@
         1031
       ],
       "ItemCounts": [
-        12,
-        5,
+        4,
+        16,
         16
       ],
       "Results": [
@@ -8119,9 +8119,9 @@
       ],
       "ResultCounts": [
         8,
-        12
+        4
       ],
-      "TimeSpend": 480,
+      "TimeSpend": 2880,
       "Proliferator": 1,
       "IconName": ""
     },

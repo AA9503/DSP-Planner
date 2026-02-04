@@ -223,6 +223,7 @@ export function get_game_data(mod_guid_list) {
         let 时间 = recipe.TimeSpend / 60.0;
         let 增产 = recipe.Proliferator;
         data.recipe_data.push({
+            "名称": recipe.Name,
             "原料": 原料,
             "产物": 产物,
             "设施": 设施,

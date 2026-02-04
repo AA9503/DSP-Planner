@@ -1,4 +1,4 @@
-import {useContext, useState, useMemo} from 'react';
+import {useContext, useState, useMemo, useEffect} from 'react';
 import '../css/FactoryPlanner.scss';
 import {Recipe} from './recipe.jsx'; 
 import {GlobalStateContext, GameInfoSetterContext, SchemeDataSetterContext, SettingsSetterContext} from './contexts';
@@ -21,22 +21,125 @@ export function FactoryPlannerLayout() {
     const set_game_data = useContext(GameInfoSetterContext);
     const set_scheme_data = useContext(SchemeDataSetterContext);
     const set_settings = useContext(SettingsSetterContext);
-    const [mods, setMods] = useState([]);
+    const [mods, setMods] = useState(() => {
+        try {
+            const savedMods = localStorage.getItem('dsp_mods');
+            if (savedMods) {
+                return JSON.parse(savedMods);
+            }
+        } catch (e) {
+            console.error('无法读取缓存的模组选择:', e);
+        }
+        return [];
+    });
     const mod_options = get_mod_options();
 
-    // View State
-    const [plans, setPlans] = useState([{
-        id: 1,
-        name: '新方案',
-        products: [],
-        productionRows: [],
-        userFreeItems: new Set()
-    }]);
-    const [activePlanId, setActivePlanId] = useState(1);
+    // View State - 从localStorage加载初始数据
+    const [plans, setPlans] = useState(() => {
+        try {
+            const savedPlans = localStorage.getItem('dsp_plans');
+            if (savedPlans) {
+                const parsed = JSON.parse(savedPlans);
+                // 恢复 Set 结构，但保持 recipeId 格式（稍后在 useMemo 中转换）
+                return parsed.map(plan => ({
+                    ...plan,
+                    userFreeItems: new Set(plan.userFreeItems || []),
+                    // 保持原始的 productionRows 结构（包含 recipeId）
+                    productionRows: plan.productionRows || []
+                }));
+            }
+        } catch (e) {
+            console.error('无法读取浏览器缓存的方案:', e);
+        }
+        // 默认初始值
+        return [{
+            id: 1,
+            name: '新方案',
+            products: [],
+            productionRows: [],
+            userFreeItems: new Set()
+        }];
+    });
+
+    const [activePlanId, setActivePlanId] = useState(() => {
+        try {
+            const savedId = localStorage.getItem('dsp_active_plan_id');
+            if (savedId) {
+                return parseInt(savedId, 10);
+            }
+        } catch (e) {
+            console.error('无法读取缓存的活动方案ID:', e);
+        }
+        return 1;
+    });
+
+    // 初始化时加载保存的模组配置
+    useEffect(() => {
+        if (mods.length > 0) {
+            let new_game_data = get_game_data(mods);
+            set_game_data(new_game_data);
+            set_scheme_data(init_scheme_data(new_game_data));
+        }
+    }, []); // 只在组件挂载时执行一次
+
+    // 自动保存到localStorage
+    useEffect(() => {
+        try {
+            const plansToSave = plans.map(plan => ({
+                ...plan,
+                // Set 无法被 JSON.stringify 序列化，需要转为数组
+                userFreeItems: Array.from(plan.userFreeItems),
+                // 保存配方名称而非完整配方对象
+                productionRows: plan.productionRows
+                    .map(row => {
+                        // 尝试从多个来源获取配方名称
+                        const recipeName = row.recipeName || row.recipeObj?.['名称'] || '';
+                        return {
+                            id: row.id,
+                            recipeName: recipeName,
+                            isByproductConsumer: row.isByproductConsumer || false
+                        };
+                    })
+                    .filter(row => row.recipeName) // 过滤掉空名称的配方
+            }));
+            localStorage.setItem('dsp_plans', JSON.stringify(plansToSave));
+            localStorage.setItem('dsp_active_plan_id', activePlanId.toString());
+            localStorage.setItem('dsp_mods', JSON.stringify(mods));
+        } catch (e) {
+            console.error('无法保存方案到浏览器缓存:', e);
+        }
+    }, [plans, activePlanId, mods, game_data]);
     
     const activePlan = useMemo(() => plans.find(p => p.id === activePlanId), [plans, activePlanId]);
     const products = useMemo(() => activePlan?.products || [], [activePlan]);
-    const productionRows = useMemo(() => activePlan?.productionRows || [], [activePlan]);
+    // 动态将 recipeName 转换为最新的 recipeObj
+    const productionRows = useMemo(() => {
+        if (!activePlan?.productionRows || !game_data?.recipe_data) return [];
+        return activePlan.productionRows.map(row => {
+            // 获取配方名称（从 recipeName 或 recipeObj 中）
+            const recipeName = row.recipeName || row.recipeObj?.['名称'];
+            
+            if (!recipeName) {
+                console.warn('配方没有名称，跳过:', row);
+                return null;
+            }
+            
+            // 总是从 game_data 中查找最新的配方对象
+            const recipeObj = game_data.recipe_data.find(r => r['名称'] === recipeName);
+            
+            if (!recipeObj) {
+                console.warn(`配方 "${recipeName}" 在当前游戏数据中未找到`);
+                return null;
+            }
+            
+            return {
+                id: row.id,
+                recipeName: recipeName,
+                recipeObj: recipeObj,
+                isByproductConsumer: row.isByproductConsumer || false
+            };
+        }).filter(row => row !== null);
+    }, [activePlan, game_data]);
     const userFreeItems = useMemo(() => activePlan?.userFreeItems || new Set(), [activePlan]);
     
     const setProducts = (newProducts) => {
@@ -358,6 +461,7 @@ export function FactoryPlannerLayout() {
             setProductionRows([...productionRows, { 
                 id: Date.now(), 
                 recipeObj: recipe,
+                recipeName: recipe['名称'],
                 isByproductConsumer: isByproductConsumer
             }]);
         }
