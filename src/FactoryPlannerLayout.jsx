@@ -279,7 +279,7 @@ export function FactoryPlannerLayout() {
     };
 
     // --- MATRIX CALCULATOR ---
-    const { solvedRows, netIngredients, netByproducts, netStatusMap, solverError, intermediates } = useMemo(() => {
+    const { solvedRows, netIngredients, netByproducts, netStatusMap, solverError, intermediates, problemItems } = useMemo(() => {
         // Setup - preserve row data and calculate factory speed
         const rows = productionRows.map(r => {
             // 获取工厂倍率
@@ -432,13 +432,17 @@ export function FactoryPlannerLayout() {
             });
         }
         
+        // 获取有问题的物品（如果有错误的话）
+        const problemItems = result.error?.problemItems || [];
+        
         return { 
             solvedRows: rows, 
             netIngredients: netIng, 
             netByproducts: netBy, 
             netStatusMap: totalNetMap,
             solverError: result.error,
-            intermediates: result.intermediates || []
+            intermediates: result.intermediates || [],
+            problemItems: problemItems
         };
     }, [products, productionRows, userFreeItems, game_data?.factory_data]);
 
@@ -680,8 +684,10 @@ export function FactoryPlannerLayout() {
                             <div className="empty-state">请添加目标产物开始规划</div>
                         ) : solvedRows.length === 0 && products.length > 0 ? (
                             <div className="empty-state" style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px'}}>
-                                <span>👆 点击上方目标产物添加配方</span>
-                                <span style={{fontSize: '12px', color: '#888'}}>或点击“原料输入”中的物品添加生产配方</span>
+                                <span>👆 点击上方目标产物添加配方,然后依次处理未规划的原料，直至完成设计</span>                                          
+                                <span>红色背景表示配方未规划</span>
+                                 <span>黄色背景表示物品为副产物</span>
+                                  <span>紫色背景表示物品为催化剂</span>
                             </div>
                         ) : (
                             <table className="table-dark">
@@ -831,18 +837,20 @@ export function FactoryPlannerLayout() {
 
                     {/* Bottom Status Bar - inside the right column */}
                     <div className="fp-statusbar" style={{
-                        minHeight: '36px',
+                        height: '44px',
+                        minHeight: '44px',
+                        maxHeight: '44px',
                         background: 'linear-gradient(180deg, #2a2a2a 0%, #222 100%)',
                         borderTop: '1px solid #444',
                         display: 'flex',
                         alignItems: 'center',
                         padding: '4px 12px',
                         gap: '16px',
-                        flexWrap: 'wrap'
+                        overflow: 'hidden'
                     }}>
                 {/* Error Status */}
                 {solverError && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ff6b6b' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ff6b6b', flexShrink: 0 }}>
                         <span>⚠️</span>
                         <span style={{ fontSize: '12px' }}>{solverError.message}</span>
                         {solverError.problemItems && solverError.problemItems.map((item, i) => (
@@ -858,11 +866,18 @@ export function FactoryPlannerLayout() {
                     </div>
                 )}
                 
-                {/* Intermediate Items */}
+                {/* Intermediate Items - 优先显示有问题的物品 */}
                 {intermediates.length > 0 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: solverError ? '16px' : '0' }}>
-                        <span style={{ color: '#4a90d9', fontSize: '12px', fontWeight: 'bold' }}>中间产物:</span>
-                        <span style={{ color: '#666', fontSize: '11px' }}>(点击设为自由变量)</span>
+                    <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '6px', 
+                        marginLeft: solverError ? '16px' : '0',
+                        flex: 1,
+                        minWidth: 0,
+                        overflow: 'hidden'
+                    }}>
+                        <span style={{ color: '#4a90d9', fontSize: '12px', fontWeight: 'bold', flexShrink: 0 }}>中间产物:</span>
                         <span 
                             style={{ 
                                 display: 'inline-flex',
@@ -875,39 +890,92 @@ export function FactoryPlannerLayout() {
                                 color: '#888',
                                 fontSize: '10px',
                                 cursor: 'help',
-                                marginLeft: '-2px'
+                                flexShrink: 0
                             }}
                             title="自由变量说明：&#10;&#10;当配方之间存在循环依赖（如A需要B，B也需要A），&#10;或者某个中间产物有多个来源时，矩阵可能存在&#10;「冗余约束」导致无法求解。&#10;&#10;将中间产物设为「自由变量」意味着允许它从外部&#10;输入或输出，从而打破循环依赖，使系统可解。&#10;&#10;设为自由变量后，该物品会出现在「原料输入」或&#10;「副产物」栏中，表示需要外部提供或有多余产出。"
                         >?</span>
-                        {intermediates.map((item, i) => {
-                            const isFree = userFreeItems.has(item);
-                            return (
-                                <div 
-                                    key={i} 
-                                    onClick={() => toggleFreeItem(item)}
-                                    style={{
-                                        cursor: 'pointer',
-                                        border: isFree ? '2px solid #88cc88' : '2px solid transparent',
-                                        borderRadius: '4px',
-                                        background: isFree ? 'rgba(136, 204, 136, 0.2)' : 'transparent',
-                                        transform: 'scale(0.75)',
-                                        marginLeft: '-6px',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        alignItems: 'center'
-                                    }}
-                                    title={isFree ? '点击取消自由变量' : '点击设为自由变量'}
-                                >
-                                    <IconSlot item={item} type={isFree ? "product-satisfied" : "intermediate"} />
-                                    {isFree && <div style={{ fontSize: '9px', color: '#88cc88', marginTop: '-4px' }}>自由</div>}
-                                </div>
-                            );
-                        })}
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '2px',
+                            overflowX: 'auto',
+                            overflowY: 'hidden',
+                            flex: 1,
+                            minWidth: 0,
+                            scrollbarWidth: 'thin',
+                            scrollbarColor: '#555 #333'
+                        }}>
+                            {/* 先显示有问题的物品（红色边框） */}
+                            {problemItems.filter(item => intermediates.includes(item)).map((item, i) => {
+                                const isFree = userFreeItems.has(item);
+                                return (
+                                    <div 
+                                        key={`problem-${i}`} 
+                                        onClick={() => toggleFreeItem(item)}
+                                        style={{
+                                            cursor: 'pointer',
+                                            border: isFree ? '2px solid #88cc88' : '2px solid #ff6b6b',
+                                            borderRadius: '4px',
+                                            background: isFree ? 'rgba(136, 204, 136, 0.2)' : 'rgba(255, 107, 107, 0.15)',
+                                            transform: 'scale(0.75)',
+                                            marginLeft: '-4px',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            alignItems: 'center',
+                                            flexShrink: 0
+                                        }}
+                                        title={isFree ? '点击取消自由变量' : '⚠️ 建议设为自由变量以解决冲突'}
+                                    >
+                                        <IconSlot item={item} type={isFree ? "product-satisfied" : "ingredient"} />
+                                        {isFree && <div style={{ fontSize: '9px', color: '#88cc88', marginTop: '-4px' }}>自由</div>}
+                                        {!isFree && <div style={{ fontSize: '9px', color: '#ff6b6b', marginTop: '-4px' }}>冲突</div>}
+                                    </div>
+                                );
+                            })}
+                            {/* 分隔线（如果有问题物品和其他物品） */}
+                            {problemItems.filter(item => intermediates.includes(item)).length > 0 && 
+                             intermediates.filter(item => !problemItems.includes(item)).length > 0 && (
+                                <div style={{ 
+                                    width: '1px', 
+                                    height: '28px', 
+                                    background: '#555', 
+                                    margin: '0 4px',
+                                    flexShrink: 0 
+                                }} />
+                            )}
+                            {/* 其他中间产物 */}
+                            {intermediates.filter(item => !problemItems.includes(item)).map((item, i) => {
+                                const isFree = userFreeItems.has(item);
+                                return (
+                                    <div 
+                                        key={`other-${i}`} 
+                                        onClick={() => toggleFreeItem(item)}
+                                        style={{
+                                            cursor: 'pointer',
+                                            border: isFree ? '2px solid #88cc88' : '2px solid transparent',
+                                            borderRadius: '4px',
+                                            background: isFree ? 'rgba(136, 204, 136, 0.2)' : 'transparent',
+                                            transform: 'scale(0.75)',
+                                            marginLeft: '-4px',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            alignItems: 'center',
+                                            flexShrink: 0,
+                                            opacity: 0.6
+                                        }}
+                                        title={isFree ? '点击取消自由变量' : '点击设为自由变量'}
+                                    >
+                                        <IconSlot item={item} type={isFree ? "product-satisfied" : "intermediate"} />
+                                        {isFree && <div style={{ fontSize: '9px', color: '#88cc88', marginTop: '-4px' }}>自由</div>}
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                 )}
                 
                 {/* Status text when no issues */}
-                                {!solverError && intermediates.length === 0 && (
+                {!solverError && intermediates.length === 0 && (
                     <span style={{ color: '#666', fontSize: '12px' }}>
                         {products.length === 0 ? '就绪 - 添加目标产物开始规划' : '✓ 矩阵求解完成'}
                     </span>
