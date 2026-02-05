@@ -5979,7 +5979,7 @@
       ],
       "ItemCounts": [
         1,
-        2,
+        3,
         1
       ],
       "Results": [
@@ -5988,7 +5988,7 @@
       "ResultCounts": [
         9
       ],
-      "TimeSpend": 240,
+      "TimeSpend": 1440,
       "Proliferator": 1,
       "IconName": "plant-fuel"
     },
@@ -7632,7 +7632,7 @@
         16,
         2
       ],
-      "TimeSpend": 5760,
+      "TimeSpend":2880,
       "Proliferator": 1,
       "IconName": "wood"
     },

@@ -13,6 +13,14 @@ import {ProductEditPopover} from './components/ProductEditPopover.jsx';
 import {RecipeSelectorModal} from './components/RecipeSelectorModal.jsx';
 import {solveFactoryMatrix} from './utils/matrixSolver.js';
 
+// 增产效果表 - 模块级别常量
+const PROLIFERATOR_EFFECTS = {
+    0: { name: '无', speedup: 1.0, extra: 1.0, power: 1.0 },
+    1: { name: '1级', speedup: 1.25, extra: 1.125, power: 1.3 },
+    2: { name: '2级', speedup: 1.5, extra: 1.2, power: 1.7 },
+    4: { name: '3级', speedup: 2.0, extra: 1.25, power: 2.5 },
+};
+
 export function FactoryPlannerLayout() {
     const global_state = useContext(GlobalStateContext);
     const game_data = global_state?.game_data;
@@ -89,18 +97,22 @@ export function FactoryPlannerLayout() {
                 ...plan,
                 // Set 无法被 JSON.stringify 序列化，需要转为数组
                 userFreeItems: Array.from(plan.userFreeItems),
-                // 保存配方名称而非完整配方对象
+                // 保存配方名称和增产配置
                 productionRows: plan.productionRows
                     .map(row => {
-                        // 尝试从多个来源获取配方名称
                         const recipeName = row.recipeName || row.recipeObj?.['名称'] || '';
                         return {
                             id: row.id,
                             recipeName: recipeName,
-                            isByproductConsumer: row.isByproductConsumer || false
+                            isByproductConsumer: row.isByproductConsumer || false,
+                            proliferatorMode: row.proliferatorMode || 'none',
+                            proliferatorLevel: row.proliferatorLevel || 0,
+                            customSpeedup: row.customSpeedup || 1.0,
+                            customExtra: row.customExtra || 1.0,
+                            selectedFactoryIndex: row.selectedFactoryIndex || 0,
                         };
                     })
-                    .filter(row => row.recipeName) // 过滤掉空名称的配方
+                    .filter(row => row.recipeName)
             }));
             localStorage.setItem('dsp_plans', JSON.stringify(plansToSave));
             localStorage.setItem('dsp_active_plan_id', activePlanId.toString());
@@ -116,7 +128,6 @@ export function FactoryPlannerLayout() {
     const productionRows = useMemo(() => {
         if (!activePlan?.productionRows || !game_data?.recipe_data) return [];
         return activePlan.productionRows.map(row => {
-            // 获取配方名称（从 recipeName 或 recipeObj 中）
             const recipeName = row.recipeName || row.recipeObj?.['名称'];
             
             if (!recipeName) {
@@ -124,7 +135,6 @@ export function FactoryPlannerLayout() {
                 return null;
             }
             
-            // 总是从 game_data 中查找最新的配方对象
             const recipeObj = game_data.recipe_data.find(r => r['名称'] === recipeName);
             
             if (!recipeObj) {
@@ -136,7 +146,14 @@ export function FactoryPlannerLayout() {
                 id: row.id,
                 recipeName: recipeName,
                 recipeObj: recipeObj,
-                isByproductConsumer: row.isByproductConsumer || false
+                isByproductConsumer: row.isByproductConsumer || false,
+                // 增产配置
+                proliferatorMode: row.proliferatorMode || 'none',
+                proliferatorLevel: row.proliferatorLevel || 0,
+                customSpeedup: row.customSpeedup || 1.0,
+                customExtra: row.customExtra || 1.0,
+                // 工厂选择
+                selectedFactoryIndex: row.selectedFactoryIndex || 0,
             };
         }).filter(row => row !== null);
     }, [activePlan, game_data]);
@@ -263,18 +280,28 @@ export function FactoryPlannerLayout() {
 
     // --- MATRIX CALCULATOR ---
     const { solvedRows, netIngredients, netByproducts, netStatusMap, solverError, intermediates } = useMemo(() => {
-        // Setup - preserve isByproductConsumer from original row data (user intent)
-        const rows = productionRows.map(r => ({ 
-            ...r, 
-            factoryCount: 0, 
-            inputs: [], 
-            outputs: [], 
-            mainProducts: [], 
-            byproducts: [], 
-            catalysts: [],
-            // Preserve isByproductConsumer from original data, default to false
-            isByproductConsumer: r.isByproductConsumer || false
-        }));
+        // Setup - preserve row data and calculate factory speed
+        const rows = productionRows.map(r => {
+            // 获取工厂倍率
+            const factoryTypeIndex = r.recipeObj?.["设施"];
+            const availableFactories = game_data?.factory_data?.[factoryTypeIndex] || [];
+            const selectedFactory = availableFactories[r.selectedFactoryIndex || 0] || availableFactories[0];
+            const factorySpeed = selectedFactory?.["倍率"] || 1.0;
+            
+            return { 
+                ...r, 
+                factoryCount: 0, 
+                inputs: [], 
+                outputs: [], 
+                mainProducts: [], 
+                byproducts: [], 
+                catalysts: [],
+                factorySpeed: factorySpeed,
+                selectedFactory: selectedFactory,
+                // Preserve isByproductConsumer from original data, default to false
+                isByproductConsumer: r.isByproductConsumer || false
+            };
+        });
         if (rows.length === 0 && products.length === 0) 
             return { solvedRows: [], netIngredients: [], netByproducts: [], netStatusMap: new Map(), solverError: null, intermediates: [] };
 
@@ -317,15 +344,28 @@ export function FactoryPlannerLayout() {
             });
             row.catalysts = catalysts;
             
-            // Calculate input/output rates
+            // 获取增产配置
+            const mode = row.proliferatorMode || 'none';
+            const level = row.proliferatorLevel || 0;
+            const effect = PROLIFERATOR_EFFECTS[level] || PROLIFERATOR_EFFECTS[0];
+            const speedupMultiplier = mode === 'speedup' ? effect.speedup : 1.0;
+            const extraMultiplier = mode === 'extra' ? effect.extra : 1.0;
+            // 考虑工厂倍率
+            const factorySpeed = row.factorySpeed || 1.0;
+            const effectiveTime = row.recipeObj.时间 / (speedupMultiplier * factorySpeed);
+            
+            // Calculate input/output rates with proliferator effects
             Object.entries(outputAmounts).forEach(([item, amount]) => {
-                const rate = amount * (count / row.recipeObj.时间) * 60;
+                // 产出量受增产模式影响
+                const effectiveAmount = amount * extraMultiplier;
+                const rate = effectiveAmount * (count / effectiveTime) * 60;
                 row.outputs.push({ name: item, count: rate });
                 totalNetMap.set(item, (totalNetMap.get(item)||0) + rate);
             });
             
             Object.entries(inputAmounts).forEach(([item, amount]) => {
-                const rate = amount * (count / row.recipeObj.时间) * 60;
+                // 原料消耗量不受增产影响，但受加速影响（通过effectiveTime）
+                const rate = amount * (count / effectiveTime) * 60;
                 row.inputs.push({ name: item, count: rate });
                 totalNetMap.set(item, (totalNetMap.get(item)||0) - rate);
             });
@@ -400,7 +440,7 @@ export function FactoryPlannerLayout() {
             solverError: result.error,
             intermediates: result.intermediates || []
         };
-    }, [products, productionRows, userFreeItems]);
+    }, [products, productionRows, userFreeItems, game_data?.factory_data]);
 
     // Handler to toggle free variable
     const toggleFreeItem = (item) => {
@@ -462,7 +502,14 @@ export function FactoryPlannerLayout() {
                 id: Date.now(), 
                 recipeObj: recipe,
                 recipeName: recipe['名称'],
-                isByproductConsumer: isByproductConsumer
+                isByproductConsumer: isByproductConsumer,
+                // 增产配置：模式(none/speedup/extra)，增产剂等级(0/1/2/4)，自定义数值
+                proliferatorMode: 'none',
+                proliferatorLevel: 0,
+                customSpeedup: 1.0,
+                customExtra: 1.0,
+                // 工厂选择：默认使用第一个可用工厂(index=0)
+                selectedFactoryIndex: 0,
             }]);
         }
         setRecipeSelector({...recipeSelector, isOpen: false});
@@ -474,6 +521,20 @@ export function FactoryPlannerLayout() {
     const handleConsumeClick = (item) => {
         setRecipeSelector({ isOpen: true, item: item, mode: 'consume' });
     }
+
+    // 更新配方的增产配置
+    const handleUpdateProliferator = (rowId, field, value) => {
+        setProductionRows(prev => prev.map(row => 
+            row.id === rowId ? { ...row, [field]: value } : row
+        ));
+    };
+
+    // 更新配方的工厂选择
+    const handleUpdateFactory = (rowId, factoryIndex) => {
+        setProductionRows(prev => prev.map(row => 
+            row.id === rowId ? { ...row, selectedFactoryIndex: factoryIndex } : row
+        ));
+    };
 
     return (
         <div className="fp-container" style={{ 
@@ -615,11 +676,23 @@ export function FactoryPlannerLayout() {
 
                     {/* Recipe Table */}
                     <div className="fp-table-area">
-                        {solvedRows.length === 0 && products.length === 0 ? <div className="empty-state">请添加目标产物开始规划</div> : 
+                        {solvedRows.length === 0 && products.length === 0 ? (
+                            <div className="empty-state">请添加目标产物开始规划</div>
+                        ) : solvedRows.length === 0 && products.length > 0 ? (
+                            <div className="empty-state" style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px'}}>
+                                <span>👆 点击上方目标产物添加配方</span>
+                                <span style={{fontSize: '12px', color: '#888'}}>或点击“原料输入”中的物品添加生产配方</span>
+                            </div>
+                        ) : (
                             <table className="table-dark">
-                                <thead><tr><th style={{width:'30px'}}></th><th>配方</th><th>工厂</th><th>能耗</th><th>产物</th><th>副产物</th><th>原料</th></tr></thead>
+                                <thead><tr><th style={{width:'30px'}}></th><th>配方</th><th>增产模式</th><th>增产剂</th><th>工厂</th><th>数量</th><th>产物</th><th>副产物</th><th>原料</th></tr></thead>
                                 <tbody>
                                     {solvedRows.map(row => {
+                                        // 检查配方的增产字段，决定哪些模式可用
+                                        const prolifFlag = row.recipeObj['增产'] ?? 0;
+                                        const canSpeedup = (prolifFlag & 2) !== 0; // bit 1
+                                        const canExtra = (prolifFlag & 1) !== 0;   // bit 0
+                                        
                                         return (
                                             <tr key={row.id} style={{borderTop: '1px solid #444', background: row.isByproductConsumer ? 'rgba(100, 80, 60, 0.3)' : 'transparent'}}>
                                                 <td className="text-center"><button className="btn btn-link text-danger p-0 text-decoration-none" style={{fontSize: '20px', lineHeight: 1}} onClick={() => handleDeleteRow(row.id)}>&times;</button></td>
@@ -638,8 +711,103 @@ export function FactoryPlannerLayout() {
                                                         )}
                                                     </div>
                                                 </td>
-                                                <td><div className="d-flex align-items-center gap-2"><IconSlot item={row.recipeObj["设施"]} count={Number(row.factoryCount)} type="factory" /><span>x{row.factoryCount}</span></div></td>
-                                                <td>{row.power}</td>
+                                                {/* 增产模式列 */}
+                                                <td>
+                                                    <div className="btn-group btn-group-sm" style={{flexWrap: 'nowrap'}}>
+                                                        <button 
+                                                            className={`btn btn-sm ${row.proliferatorMode === 'none' ? 'btn-secondary' : 'btn-outline-secondary'}`}
+                                                            style={{padding: '2px 6px', fontSize: '11px', whiteSpace: 'nowrap'}}
+                                                            onClick={() => handleUpdateProliferator(row.id, 'proliferatorMode', 'none')}
+                                                        >无</button>
+                                                        <button 
+                                                            className={`btn btn-sm ${row.proliferatorMode === 'speedup' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                                                            style={{padding: '2px 6px', fontSize: '11px', whiteSpace: 'nowrap'}}
+                                                            disabled={!canSpeedup}
+                                                            onClick={() => handleUpdateProliferator(row.id, 'proliferatorMode', 'speedup')}
+                                                        >加速</button>
+                                                        <button 
+                                                            className={`btn btn-sm ${row.proliferatorMode === 'extra' ? 'btn-success' : 'btn-outline-secondary'}`}
+                                                            style={{padding: '2px 6px', fontSize: '11px', whiteSpace: 'nowrap'}}
+                                                            disabled={!canExtra}
+                                                            onClick={() => handleUpdateProliferator(row.id, 'proliferatorMode', 'extra')}
+                                                        >增产</button>
+                                                    </div>
+                                                </td>
+                                                {/* 增产剂类型列 */}
+                                                <td>
+                                                    {row.proliferatorMode !== 'none' ? (
+                                                        <div className="d-flex align-items-center gap-1">
+                                                            {[0, 1, 2, 4].map(level => {
+                                                                const effect = PROLIFERATOR_EFFECTS[level];
+                                                                const isSelected = row.proliferatorLevel === level;
+                                                                return (
+                                                                    <button
+                                                                        key={level}
+                                                                        className={`btn btn-sm ${isSelected ? 'btn-warning' : 'btn-outline-secondary'}`}
+                                                                        style={{padding: '2px 6px', fontSize: '10px', minWidth: '28px'}}
+                                                                        onClick={() => handleUpdateProliferator(row.id, 'proliferatorLevel', level)}
+                                                                        title={level === 0 ? '无增产剂' : `${effect.name}增产剂: 加速${effect.speedup}x 增产${effect.extra}x`}
+                                                                    >
+                                                                        {level === 0 ? '无' : level === 4 ? 'III' : level === 2 ? 'II' : 'I'}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    ) : (
+                                                        <span style={{color: '#666', fontSize: '11px'}}>-</span>
+                                                    )}
+                                                </td>
+                                                {/* 工厂选择列 */}
+                                                <td>
+                                                    {(() => {
+                                                        const factoryTypeIndex = row.recipeObj["设施"];
+                                                        const availableFactories = game_data?.factory_data?.[factoryTypeIndex] || [];
+                                                        const selectedIndex = row.selectedFactoryIndex || 0;
+                                                        const selectedFactory = availableFactories[selectedIndex] || availableFactories[0];
+                                                        
+                                                        if (availableFactories.length === 0) {
+                                                            return <span style={{color: '#666', fontSize: '11px'}}>无可用工厂</span>;
+                                                        }
+                                                        
+                                                        const factoryName = selectedFactory?.["名称"] || "未知";
+                                                        
+                                                        return (
+                                                            <div className="d-flex align-items-center gap-1">
+                                                                {availableFactories.length > 1 ? (
+                                                                    // 多个工厂可选时显示图标按钮组
+                                                                    availableFactories.map((factory, idx) => {
+                                                                        const isSelected = idx === selectedIndex;
+                                                                        return (
+                                                                            <div
+                                                                                key={idx}
+                                                                                onClick={() => handleUpdateFactory(row.id, idx)}
+                                                                                style={{
+                                                                                    cursor: 'pointer',
+                                                                                    padding: '2px',
+                                                                                    borderRadius: '4px',
+                                                                                    border: isSelected ? '2px solid #ffc107' : '2px solid transparent',
+                                                                                    background: isSelected ? 'rgba(255,193,7,0.15)' : 'transparent',
+                                                                                    opacity: isSelected ? 1 : 0.6,
+                                                                                }}
+                                                                                title={`${factory["名称"]} (倍率: ${factory["倍率"]}x, 能耗: ${factory["耗能"].toFixed(1)}MW)`}
+                                                                            >
+                                                                                <IconSlot item={factory["名称"]} type="factory" />
+                                                                            </div>
+                                                                        );
+                                                                    })
+                                                                ) : (
+                                                                    // 只有一个工厂时直接显示
+                                                                    <IconSlot item={factoryName} type="factory" />
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                </td>
+                                                {/* 工厂数量列 */}
+                                                <td>
+                                                    <span>x{row.factoryCount}</span>
+                                                </td>
+                              
                                                 <td><div className="d-flex gap-1">{row.mainProducts.map(p => {
                                                      const isCatalyst = row.catalysts?.includes(p.name);
                                                      return <IconSlot key={p.name} item={p.name} count={p.count} type={isCatalyst ? "catalyst" : "product"} className="cursor-default" />
@@ -657,7 +825,7 @@ export function FactoryPlannerLayout() {
                                     })}
                                 </tbody>
                             </table>
-                        }
+                        )}
                     </div>
                     </div>
 
@@ -695,6 +863,22 @@ export function FactoryPlannerLayout() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: solverError ? '16px' : '0' }}>
                         <span style={{ color: '#4a90d9', fontSize: '12px', fontWeight: 'bold' }}>中间产物:</span>
                         <span style={{ color: '#666', fontSize: '11px' }}>(点击设为自由变量)</span>
+                        <span 
+                            style={{ 
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '14px',
+                                height: '14px',
+                                borderRadius: '50%',
+                                border: '1px solid #666',
+                                color: '#888',
+                                fontSize: '10px',
+                                cursor: 'help',
+                                marginLeft: '-2px'
+                            }}
+                            title="自由变量说明：&#10;&#10;当配方之间存在循环依赖（如A需要B，B也需要A），&#10;或者某个中间产物有多个来源时，矩阵可能存在&#10;「冗余约束」导致无法求解。&#10;&#10;将中间产物设为「自由变量」意味着允许它从外部&#10;输入或输出，从而打破循环依赖，使系统可解。&#10;&#10;设为自由变量后，该物品会出现在「原料输入」或&#10;「副产物」栏中，表示需要外部提供或有多余产出。"
+                        >?</span>
                         {intermediates.map((item, i) => {
                             const isFree = userFreeItems.has(item);
                             return (

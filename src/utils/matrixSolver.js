@@ -7,7 +7,20 @@
  * - Byproducts: produced but not consumed (and not target) -> Free Variable
  * - Intermediate: both produced and consumed -> Constrained (net = 0) unless user marks as free
  * - Target: user-specified output
+ * 
+ * Proliferator Modes:
+ * - none: no effect
+ * - speedup: production time is divided by speedup multiplier
+ * - extra: output amounts are multiplied by extra multiplier (inputs unchanged)
  */
+
+// 增产效果表
+const PROLIFERATOR_EFFECTS = {
+    0: { speedup: 1.0, extra: 1.0 },
+    1: { speedup: 1.25, extra: 1.125 },
+    2: { speedup: 1.5, extra: 1.2 },
+    4: { speedup: 2.0, extra: 1.25 },
+};
 
 export function solveFactoryMatrix(rows, products, userFreeItems = new Set()) {
     if (rows.length === 0) {
@@ -31,6 +44,7 @@ export function solveFactoryMatrix(rows, products, userFreeItems = new Set()) {
     });
     
     rows.forEach(r => {
+        // 产物（增产模式下会增加产量）
         Object.keys(r.recipeObj.产物 || {}).forEach(item => {
             if (!itemInfo.has(item)) itemInfo.set(item, { produced: false, consumed: false, target: 0 });
             itemInfo.get(item).produced = true;
@@ -80,15 +94,38 @@ export function solveFactoryMatrix(rows, products, userFreeItems = new Set()) {
     // 4. Build augmented matrix [A | b]
     const M = Array(numRows).fill(0).map(() => Array(numCols + 1).fill(0));
     
-    // Fill recipe columns
+    // Fill recipe columns (with proliferator effects and factory speed)
     allItems.forEach((item, rowIdx) => {
         rows.forEach((row, colIdx) => {
             const recipe = row.recipeObj;
+            
+            // 获取增产配置
+            const mode = row.proliferatorMode || 'none';
+            const level = row.proliferatorLevel || 0;
+            const effect = PROLIFERATOR_EFFECTS[level] || PROLIFERATOR_EFFECTS[0];
+            
+            // 获取工厂倍率（从传入的row数据中）
+            const factorySpeed = row.factorySpeed || 1.0;
+            
+            // 计算实际时间（考虑工厂倍率和加速模式）
+            const speedupMultiplier = mode === 'speedup' ? effect.speedup : 1.0;
+            const effectiveTime = recipe.时间 / (speedupMultiplier * factorySpeed);
+            
+            // 计算实际产出倍率（增产模式下增加）
+            const extraMultiplier = mode === 'extra' ? effect.extra : 1.0;
+            
             let rate = 0;
-            if (recipe.产物 && recipe.产物[item]) rate += Number(recipe.产物[item]);
-            if (recipe.原料 && recipe.原料[item]) rate -= Number(recipe.原料[item]);
+            // 产物：增产模式下产量增加
+            if (recipe.产物 && recipe.产物[item]) {
+                rate += Number(recipe.产物[item]) * extraMultiplier;
+            }
+            // 原料：不受增产模式影响，只受加速模式影响（通过时间）
+            if (recipe.原料 && recipe.原料[item]) {
+                rate -= Number(recipe.原料[item]);
+            }
+            
             if (rate !== 0) {
-                M[rowIdx][colIdx] = (rate / recipe.时间) * 60;
+                M[rowIdx][colIdx] = (rate / effectiveTime) * 60;
             }
         });
     });

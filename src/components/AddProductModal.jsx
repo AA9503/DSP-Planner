@@ -67,10 +67,10 @@ export function AddProductModal({ isOpen, onClose, onConfirm }) {
                          </div>
 
                          <div className="d-flex align-items-center gap-2 border-start border-secondary ps-3 ms-2">
-                             <span className="text-muted small">目标:</span>
+                             <span className="text-light small">目标:</span>
                              <input type="number" className="form-control form-control-sm bg-secondary text-white border-0" style={{width: '80px', textAlign:'center'}}
                                 value={amount} onChange={e => setAmount(Number(e.target.value))} />
-                             <span className="text-muted small">/min</span>
+                             <span className="text-light small">个/分钟</span>
                          </div>
                          
                          <div className="ms-auto">
