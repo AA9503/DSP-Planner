@@ -428,3 +428,23 @@ $fp-accent: #fa9d00;
         border-color: #888 !important;
     }
 }
+
+// 底部状态栏滚动区域
+.fp-statusbar-scroll {
+    &::-webkit-scrollbar {
+        height: 4px;
+    }
+    &::-webkit-scrollbar-track {
+        background: #333;
+        border-radius: 2px;
+    }
+    &::-webkit-scrollbar-thumb {
+        background: #555;
+        border-radius: 2px;
+        &:hover {
+            background: #777;
+        }
+    }
+    scrollbar-width: thin;
+    scrollbar-color: #555 #333;
+}

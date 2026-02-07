@@ -6570,7 +6570,7 @@
         2,
         3
       ],
-      "TimeSpend": 120,
+      "TimeSpend": 720,
       "Proliferator": 1,
       "IconName": "crystal-rubber-lv0"
     },
@@ -8484,9 +8484,9 @@
         1099
       ],
       "ItemCounts": [
-        18,
-        5,
-        9
+        4,
+        8,
+        1
       ],
       "Results": [
         6206,
@@ -8494,9 +8494,9 @@
       ],
       "ResultCounts": [
         4,
-        18
+        4
       ],
-      "TimeSpend": 480,
+      "TimeSpend": 1440,
       "Proliferator": 1,
       "IconName": ""
     },

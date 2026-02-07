@@ -31,6 +31,7 @@ export function solveFactoryMatrix(rows, products, userFreeItems = new Set()) {
             byproducts: [], 
             intermediates: [],
             constrainedItems: [],
+            suggestedFreeItems: [],
             error: null
         };
     }
@@ -74,7 +75,40 @@ export function solveFactoryMatrix(rows, products, userFreeItems = new Set()) {
         }
     });
     
-    // 3. Determine free variables
+    // 3. Try to solve with current free variables
+    const solveResult = _trySolve(rows, targets, intermediates, rawInputs, byproducts, userFreeItems, itemInfo);
+    
+    // 4. If error, find which intermediates can resolve it
+    if (solveResult.error) {
+        const constrainedIntermediates = intermediates.filter(i => !userFreeItems.has(i));
+        const suggestedFreeItems = [];
+        
+        for (const candidate of constrainedIntermediates) {
+            const testFreeItems = new Set(userFreeItems);
+            testFreeItems.add(candidate);
+            const testResult = _trySolve(rows, targets, intermediates, rawInputs, byproducts, testFreeItems, itemInfo);
+            if (!testResult.error) {
+                suggestedFreeItems.push(candidate);
+            }
+        }
+        
+        solveResult.suggestedFreeItems = suggestedFreeItems;
+        solveResult.error.suggestedFreeItems = suggestedFreeItems;
+        if (suggestedFreeItems.length > 0) {
+            solveResult.error.suggestion = `建议将以下物品之一设为自由变量: ${suggestedFreeItems.map(s => `"${s}"`).join(', ')}`;
+        }
+    } else {
+        solveResult.suggestedFreeItems = [];
+    }
+    
+    return solveResult;
+}
+
+/**
+ * 内部求解函数，尝试用给定的自由变量集合求解
+ */
+function _trySolve(rows, targets, intermediates, rawInputs, byproducts, userFreeItems, itemInfo) {
+    // Determine free variables
     const autoFreeVars = new Set([...rawInputs, ...byproducts]);
     const allFreeVars = new Set([...autoFreeVars, ...userFreeItems]);
     
@@ -91,7 +125,7 @@ export function solveFactoryMatrix(rows, products, userFreeItems = new Set()) {
     const numCols = numRecipes + numFreeVars;
     const numRows = allItems.length;
     
-    // 4. Build augmented matrix [A | b]
+    // Build augmented matrix [A | b]
     const M = Array(numRows).fill(0).map(() => Array(numCols + 1).fill(0));
     
     // Fill recipe columns (with proliferator effects and factory speed)
@@ -99,27 +133,18 @@ export function solveFactoryMatrix(rows, products, userFreeItems = new Set()) {
         rows.forEach((row, colIdx) => {
             const recipe = row.recipeObj;
             
-            // 获取增产配置
             const mode = row.proliferatorMode || 'none';
             const level = row.proliferatorLevel || 0;
             const effect = PROLIFERATOR_EFFECTS[level] || PROLIFERATOR_EFFECTS[0];
-            
-            // 获取工厂倍率（从传入的row数据中）
             const factorySpeed = row.factorySpeed || 1.0;
-            
-            // 计算实际时间（考虑工厂倍率和加速模式）
             const speedupMultiplier = mode === 'speedup' ? effect.speedup : 1.0;
             const effectiveTime = recipe.时间 / (speedupMultiplier * factorySpeed);
-            
-            // 计算实际产出倍率（增产模式下增加）
             const extraMultiplier = mode === 'extra' ? effect.extra : 1.0;
             
             let rate = 0;
-            // 产物：增产模式下产量增加
             if (recipe.产物 && recipe.产物[item]) {
                 rate += Number(recipe.产物[item]) * extraMultiplier;
             }
-            // 原料：不受增产模式影响，只受加速模式影响（通过时间）
             if (recipe.原料 && recipe.原料[item]) {
                 rate -= Number(recipe.原料[item]);
             }
@@ -146,49 +171,39 @@ export function solveFactoryMatrix(rows, products, userFreeItems = new Set()) {
         }
     });
     
-    // 5. Solve
+    // Solve
     const result = gaussJordanSolve(M, numRows, numCols);
     
-    // 6. Check for errors
+    // Check for errors
     if (result.inconsistentRows.length > 0) {
-        const problemItems = result.inconsistentRows
-            .filter(r => r < constrainedItems.length)
-            .map(r => constrainedItems[r]);
-        
         return {
             solution: null,
             freeVarAmounts: new Map(),
             rawInputs, byproducts, intermediates, constrainedItems,
+            suggestedFreeItems: [],
             error: {
                 type: 'inconsistent',
                 message: '系统矛盾：某些中间产物的产量和消耗量无法平衡',
-                problemItems,
-                suggestion: problemItems.length > 0 
-                    ? `建议将 "${problemItems[0]}" 设为自由变量（允许外部输入/输出）`
-                    : '请检查配方是否有冲突'
+                suggestion: '请检查配方是否有冲突'
             }
         };
     }
     
     if (result.dependentCols.length > 0) {
-        const dependentRecipes = result.dependentCols
-            .filter(c => c < numRecipes)
-            .map(c => rows[c].recipeObj);
-        
         return {
             solution: null,
             freeVarAmounts: new Map(),
             rawInputs, byproducts, intermediates, constrainedItems,
+            suggestedFreeItems: [],
             error: {
                 type: 'dependent',
-                message: '检测到线性相关：存在冗余配方',
-                dependentRecipes,
+                message: '检测到线性相关：存在冗余配方或约束不足',
                 suggestion: '请删除冗余配方，或将某个中间产物设为自由变量'
             }
         };
     }
     
-    // 7. Extract solution
+    // Extract solution
     const recipeCounts = [];
     for (let i = 0; i < numRecipes; i++) {
         recipeCounts.push(result.solution[i] || 0);
@@ -207,6 +222,7 @@ export function solveFactoryMatrix(rows, products, userFreeItems = new Set()) {
         byproducts, 
         intermediates,
         constrainedItems,
+        suggestedFreeItems: [],
         error: null
     };
 }

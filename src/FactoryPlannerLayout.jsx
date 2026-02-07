@@ -110,6 +110,7 @@ export function FactoryPlannerLayout() {
                             customSpeedup: row.customSpeedup || 1.0,
                             customExtra: row.customExtra || 1.0,
                             selectedFactoryIndex: row.selectedFactoryIndex || 0,
+                            isBuilt: row.isBuilt || false,
                         };
                     })
                     .filter(row => row.recipeName)
@@ -154,6 +155,8 @@ export function FactoryPlannerLayout() {
                 customExtra: row.customExtra || 1.0,
                 // 工厂选择
                 selectedFactoryIndex: row.selectedFactoryIndex || 0,
+                // 搭建完成标记
+                isBuilt: row.isBuilt || false,
             };
         }).filter(row => row !== null);
     }, [activePlan, game_data]);
@@ -279,7 +282,7 @@ export function FactoryPlannerLayout() {
     };
 
     // --- MATRIX CALCULATOR ---
-    const { solvedRows, netIngredients, netByproducts, netStatusMap, solverError, intermediates, problemItems } = useMemo(() => {
+    const { solvedRows, netIngredients, netByproducts, netStatusMap, solverError, intermediates, suggestedFreeItems } = useMemo(() => {
         // Setup - preserve row data and calculate factory speed
         const rows = productionRows.map(r => {
             // 获取工厂倍率
@@ -432,9 +435,6 @@ export function FactoryPlannerLayout() {
             });
         }
         
-        // 获取有问题的物品（如果有错误的话）
-        const problemItems = result.error?.problemItems || [];
-        
         return { 
             solvedRows: rows, 
             netIngredients: netIng, 
@@ -442,7 +442,7 @@ export function FactoryPlannerLayout() {
             netStatusMap: totalNetMap,
             solverError: result.error,
             intermediates: result.intermediates || [],
-            problemItems: problemItems
+            suggestedFreeItems: result.suggestedFreeItems || []
         };
     }, [products, productionRows, userFreeItems, game_data?.factory_data]);
 
@@ -514,6 +514,8 @@ export function FactoryPlannerLayout() {
                 customExtra: 1.0,
                 // 工厂选择：默认使用第一个可用工厂(index=0)
                 selectedFactoryIndex: 0,
+                // 搭建完成标记
+                isBuilt: false,
             }]);
         }
         setRecipeSelector({...recipeSelector, isOpen: false});
@@ -537,6 +539,13 @@ export function FactoryPlannerLayout() {
     const handleUpdateFactory = (rowId, factoryIndex) => {
         setProductionRows(prev => prev.map(row => 
             row.id === rowId ? { ...row, selectedFactoryIndex: factoryIndex } : row
+        ));
+    };
+
+    // 切换配方的搭建完成状态
+    const handleToggleBuilt = (rowId) => {
+        setProductionRows(prev => prev.map(row => 
+            row.id === rowId ? { ...row, isBuilt: !row.isBuilt } : row
         ));
     };
 
@@ -691,7 +700,7 @@ export function FactoryPlannerLayout() {
                             </div>
                         ) : (
                             <table className="table-dark">
-                                <thead><tr><th style={{width:'30px'}}></th><th>配方</th><th>增产模式</th><th>增产剂</th><th>工厂</th><th>数量</th><th>产物</th><th>副产物</th><th>原料</th></tr></thead>
+                                <thead><tr><th style={{width:'30px'}}></th><th>配方</th><th>增产模式</th><th>增产剂</th><th>工厂</th><th>数量</th><th>产物</th><th>副产物</th><th>原料</th><th style={{width:'40px'}}>完成</th></tr></thead>
                                 <tbody>
                                     {solvedRows.map(row => {
                                         // 检查配方的增产字段，决定哪些模式可用
@@ -700,7 +709,7 @@ export function FactoryPlannerLayout() {
                                         const canExtra = (prolifFlag & 1) !== 0;   // bit 0
                                         
                                         return (
-                                            <tr key={row.id} style={{borderTop: '1px solid #444', background: row.isByproductConsumer ? 'rgba(100, 80, 60, 0.3)' : 'transparent'}}>
+                                            <tr key={row.id} style={{borderTop: '1px solid #444', background: row.isByproductConsumer ? 'rgba(100, 80, 60, 0.3)' : 'transparent', opacity: row.isBuilt ? 0.5 : 1}}>
                                                 <td className="text-center"><button className="btn btn-link text-danger p-0 text-decoration-none" style={{fontSize: '20px', lineHeight: 1}} onClick={() => handleDeleteRow(row.id)}>&times;</button></td>
                                                 <td>
                                                     <div className="d-flex align-items-center gap-2">
@@ -826,6 +835,9 @@ export function FactoryPlannerLayout() {
                                                      const isCatalyst = row.catalysts?.includes(p.name);
                                                      return <IconSlot key={p.name} item={p.name} count={p.count} type={isCatalyst ? "catalyst" : (isSat?"product-satisfied":"product-unplanned")} onClick={!isSat && !isCatalyst ?()=>handleSmartClick(p.name):undefined} />
                                                 })}</div></td>
+                                                <td className="text-center">
+                                                    <input type="checkbox" checked={row.isBuilt || false} onChange={() => handleToggleBuilt(row.id)} style={{width:'16px', height:'16px', cursor:'pointer'}} />
+                                                </td>
                                             </tr>
                                         );
                                     })}
@@ -845,39 +857,26 @@ export function FactoryPlannerLayout() {
                         display: 'flex',
                         alignItems: 'center',
                         padding: '4px 12px',
-                        gap: '16px',
-                        overflow: 'hidden'
+                        gap: '10px'
                     }}>
                 {/* Error Status */}
                 {solverError && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ff6b6b', flexShrink: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#ff6b6b', flexShrink: 0 }}>
                         <span>⚠️</span>
-                        <span style={{ fontSize: '12px' }}>{solverError.message}</span>
-                        {solverError.problemItems && solverError.problemItems.map((item, i) => (
-                            <div key={i} style={{ transform: 'scale(0.7)', marginLeft: '-4px' }}>
-                                <IconSlot item={item} type="ingredient" />
-                            </div>
-                        ))}
-                        {solverError.suggestion && (
-                            <span style={{ fontSize: '11px', color: '#88cc88', marginLeft: '8px' }}>
-                                💡 {solverError.suggestion}
-                            </span>
-                        )}
+                        <span style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>{solverError.message}</span>
                     </div>
                 )}
                 
-                {/* Intermediate Items - 优先显示有问题的物品 */}
+                {/* Intermediate Items */}
                 {intermediates.length > 0 && (
                     <div style={{ 
                         display: 'flex', 
                         alignItems: 'center', 
-                        gap: '6px', 
-                        marginLeft: solverError ? '16px' : '0',
+                        gap: '4px', 
                         flex: 1,
-                        minWidth: 0,
-                        overflow: 'hidden'
+                        minWidth: 0
                     }}>
-                        <span style={{ color: '#4a90d9', fontSize: '12px', fontWeight: 'bold', flexShrink: 0 }}>中间产物:</span>
+                        <span style={{ color: '#4a90d9', fontSize: '12px', fontWeight: 'bold', flexShrink: 0, whiteSpace: 'nowrap' }}>中间产物:</span>
                         <span 
                             style={{ 
                                 display: 'inline-flex',
@@ -892,59 +891,56 @@ export function FactoryPlannerLayout() {
                                 cursor: 'help',
                                 flexShrink: 0
                             }}
-                            title="自由变量说明：&#10;&#10;当配方之间存在循环依赖（如A需要B，B也需要A），&#10;或者某个中间产物有多个来源时，矩阵可能存在&#10;「冗余约束」导致无法求解。&#10;&#10;将中间产物设为「自由变量」意味着允许它从外部&#10;输入或输出，从而打破循环依赖，使系统可解。&#10;&#10;设为自由变量后，该物品会出现在「原料输入」或&#10;「副产物」栏中，表示需要外部提供或有多余产出。"
+                            title={"自由变量说明：\n\n当配方之间存在循环依赖（如A需要B，B也需要A），\n或者某个中间产物有多个来源时，矩阵可能存在\n「冗余约束」导致无法求解。\n\n将中间产物设为「自由变量」意味着允许它从外部\n输入或输出，从而打破循环依赖，使系统可解。\n\n设为自由变量后，该物品会出现在「原料输入」或\n「副产物」栏中，表示需要外部提供或有多余产出。"}
                         >?</span>
                         <div style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '2px',
+                            gap: '0px',
                             overflowX: 'auto',
                             overflowY: 'hidden',
                             flex: 1,
                             minWidth: 0,
-                            scrollbarWidth: 'thin',
-                            scrollbarColor: '#555 #333'
-                        }}>
-                            {/* 先显示有问题的物品（红色边框） */}
-                            {problemItems.filter(item => intermediates.includes(item)).map((item, i) => {
-                                const isFree = userFreeItems.has(item);
-                                return (
-                                    <div 
-                                        key={`problem-${i}`} 
-                                        onClick={() => toggleFreeItem(item)}
-                                        style={{
-                                            cursor: 'pointer',
-                                            border: isFree ? '2px solid #88cc88' : '2px solid #ff6b6b',
-                                            borderRadius: '4px',
-                                            background: isFree ? 'rgba(136, 204, 136, 0.2)' : 'rgba(255, 107, 107, 0.15)',
-                                            transform: 'scale(0.75)',
-                                            marginLeft: '-4px',
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            alignItems: 'center',
-                                            flexShrink: 0
-                                        }}
-                                        title={isFree ? '点击取消自由变量' : '⚠️ 建议设为自由变量以解决冲突'}
-                                    >
-                                        <IconSlot item={item} type={isFree ? "product-satisfied" : "ingredient"} />
-                                        {isFree && <div style={{ fontSize: '9px', color: '#88cc88', marginTop: '-4px' }}>自由</div>}
-                                        {!isFree && <div style={{ fontSize: '9px', color: '#ff6b6b', marginTop: '-4px' }}>冲突</div>}
-                                    </div>
-                                );
-                            })}
-                            {/* 分隔线（如果有问题物品和其他物品） */}
-                            {problemItems.filter(item => intermediates.includes(item)).length > 0 && 
-                             intermediates.filter(item => !problemItems.includes(item)).length > 0 && (
-                                <div style={{ 
-                                    width: '1px', 
-                                    height: '28px', 
-                                    background: '#555', 
-                                    margin: '0 4px',
-                                    flexShrink: 0 
-                                }} />
+                            height: '40px',
+                            paddingBottom: '2px'
+                        }} className="fp-statusbar-scroll">
+                            {/* 建议设为自由变量的物品（橙色边框） */}
+                            {suggestedFreeItems.filter(item => !userFreeItems.has(item)).map((item, i) => (
+                                <div 
+                                    key={`suggest-${i}`} 
+                                    onClick={() => toggleFreeItem(item)}
+                                    style={{
+                                        cursor: 'pointer',
+                                        border: '2px solid #e8a838',
+                                        borderRadius: '4px',
+                                        background: 'rgba(232, 168, 56, 0.15)',
+                                        transform: 'scale(0.7)',
+                                        margin: '0 -4px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        flexShrink: 0
+                                    }}
+                                    title={`⚠️ 建议将「${item}」设为自由变量以解决求解冲突`}
+                                >
+                                    <IconSlot item={item} type="ingredient" />
+                                    <div style={{ fontSize: '9px', color: '#e8a838', marginTop: '-4px' }}>建议</div>
+                                </div>
+                            ))}
+                            {/* 分隔线 */}
+                            {suggestedFreeItems.filter(item => !userFreeItems.has(item)).length > 0 && 
+                             intermediates.filter(item => !suggestedFreeItems.includes(item) || userFreeItems.has(item)).length > 0 && (
+                                <div style={{ width: '1px', height: '28px', background: '#555', margin: '0 2px', flexShrink: 0 }} />
                             )}
-                            {/* 其他中间产物 */}
-                            {intermediates.filter(item => !problemItems.includes(item)).map((item, i) => {
+                            {/* 其他中间产物（已设为自由变量的排前面） */}
+                            {intermediates
+                                .filter(item => !suggestedFreeItems.includes(item) || userFreeItems.has(item))
+                                .sort((a, b) => {
+                                    const aFree = userFreeItems.has(a) ? 0 : 1;
+                                    const bFree = userFreeItems.has(b) ? 0 : 1;
+                                    return aFree - bFree;
+                                })
+                                .map((item, i) => {
                                 const isFree = userFreeItems.has(item);
                                 return (
                                     <div 
@@ -955,15 +951,14 @@ export function FactoryPlannerLayout() {
                                             border: isFree ? '2px solid #88cc88' : '2px solid transparent',
                                             borderRadius: '4px',
                                             background: isFree ? 'rgba(136, 204, 136, 0.2)' : 'transparent',
-                                            transform: 'scale(0.75)',
-                                            marginLeft: '-4px',
+                                            transform: 'scale(0.7)',
+                                            margin: '0 -4px',
                                             display: 'flex',
                                             flexDirection: 'column',
                                             alignItems: 'center',
-                                            flexShrink: 0,
-                                            opacity: 0.6
+                                            flexShrink: 0
                                         }}
-                                        title={isFree ? '点击取消自由变量' : '点击设为自由变量'}
+                                        title={isFree ? `「${item}」已设为自由变量（点击取消）` : `点击将「${item}」设为自由变量`}
                                     >
                                         <IconSlot item={item} type={isFree ? "product-satisfied" : "intermediate"} />
                                         {isFree && <div style={{ fontSize: '9px', color: '#88cc88', marginTop: '-4px' }}>自由</div>}
